@@ -2,10 +2,13 @@ import os
 import re
 import base64
 import urllib3
+import ssl
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
+from requests.adapters import HTTPAdapter
+from urllib3.util.ssl_ import create_urllib3_context
 
 # เพิ่มการเรียกใช้ requests และ cloudscraper
 import requests
@@ -29,6 +32,15 @@ LINE_CHANNEL_SECRET = os.environ.get('LINE_CHANNEL_SECRET', 'ใส่_CHANNEL_S
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
+
+class UnverifiedContextAdapter(HTTPAdapter):
+    """ คลาสพิเศษสำหรับบังคับปิดการตรวจ SSL และ Hostname เพื่อแก้ Error CERT_NONE """
+    def init_poolmanager(self, *args, **kwargs):
+        context = create_urllib3_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        kwargs['ssl_context'] = context
+        return super(UnverifiedContextAdapter, self).init_poolmanager(*args, **kwargs)
 
 def extract_and_decode(text):
     """ ถอดรหัส qrcodeToken """
@@ -76,12 +88,15 @@ def fetch_parcel_data(provid, amphurid, parcelno):
                     'mobile': False
                 }
             )
-            response = scraper.get(api_url, params=payload, headers=headers, timeout=15, verify=False)
+            # ใช้งาน Adapter ตัวใหม่เพื่อไม่ให้ติด Error CERT_NONE
+            scraper.mount('https://', UnverifiedContextAdapter())
+            response = scraper.get(api_url, params=payload, headers=headers, timeout=15)
         else:
             # กรณีที่ยังไม่ได้ติดตั้ง cloudscraper (เพื่อไม่ให้โปรแกรมแครช)
             session = requests.Session()
-            session.get("https://landsmaps.dol.go.th/", headers={"User-Agent": headers["User-Agent"]}, timeout=10, verify=False)
-            response = session.get(api_url, params=payload, headers=headers, timeout=15, verify=False)
+            session.mount('https://', UnverifiedContextAdapter())
+            session.get("https://landsmaps.dol.go.th/", headers={"User-Agent": headers["User-Agent"]}, timeout=10)
+            response = session.get(api_url, params=payload, headers=headers, timeout=15)
         
         if response.status_code == 200:
             try:
