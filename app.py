@@ -2,10 +2,14 @@ import os
 import re
 import base64
 import requests
+import urllib3
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
+
+# ปิดแจ้งเตือนเรื่อง SSL Certificate ของเว็บรัฐ
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 
@@ -34,7 +38,7 @@ def extract_and_decode(text):
     return None, None, None
 
 def fetch_parcel_data(provid, amphurid, parcelno):
-    """ ยิง API ไปที่ระบบ LandsMaps (อัปเดต Header กันโดนบล็อก) """
+    """ ยิง API ไปที่ระบบ LandsMaps พร้อมส่ง Error กลับมาวิเคราะห์ """
     api_url = "https://landsmaps.dol.go.th/api/getParcelData" 
     payload = {
         "provid": provid,
@@ -42,7 +46,6 @@ def fetch_parcel_data(provid, amphurid, parcelno):
         "parcelno": parcelno
     }
     
-    # Header ชุดนี้สำคัญมาก ทำให้เซิร์ฟเวอร์มองว่าเราเป็น Google Chrome ปกติ
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://landsmaps.dol.go.th/",
@@ -52,12 +55,22 @@ def fetch_parcel_data(provid, amphurid, parcelno):
     }
     
     try:
-        response = requests.get(api_url, params=payload, headers=headers, timeout=10)
+        # เพิ่ม verify=False เพื่อข้ามการเช็ค SSL ที่มักจะมีปัญหากับเว็บหน่วยงาน
+        response = requests.get(api_url, params=payload, headers=headers, timeout=15, verify=False)
+        
         if response.status_code == 200:
-            return response.json()
+            try:
+                return response.json(), None
+            except ValueError:
+                # กรณีที่ระบบไม่ได้ตอบกลับเป็น JSON (อาจจะติดหน้า Firewall)
+                return None, f"ระบบไม่ได้คืนค่าเป็น JSON (อาจติด Firewall):\n{response.text[:150]}..."
+        else:
+            return None, f"HTTP Error {response.status_code}:\n{response.text[:150]}..."
+            
+    except requests.exceptions.Timeout:
+        return None, "Connection Timeout: เซิร์ฟเวอร์กรมที่ดินตอบสนองช้าเกินไป"
     except Exception as e:
-        print(f"API Error: {e}")
-    return None
+        return None, f"Connection Error: {str(e)}"
 
 @app.route("/webhook", methods=['POST'])
 def callback():
@@ -131,7 +144,7 @@ def send_menu(reply_token):
     line_bot_api.reply_message(reply_token, text_message)
 
 def reply_api_data(reply_token, provid, amphurid, parcelno):
-    parcel_data = fetch_parcel_data(provid, amphurid, parcelno)
+    parcel_data, error_msg = fetch_parcel_data(provid, amphurid, parcelno)
     
     if parcel_data:
         # ป้องกันกรณีที่ API อาจคืนค่ากลับมาเป็น List 
@@ -179,6 +192,7 @@ def reply_api_data(reply_token, provid, amphurid, parcelno):
         reply_text = (
             f"❌ ไม่พบข้อมูล หรือไม่สามารถเชื่อมต่อระบบ LandsMaps ได้\n"
             f"(จังหวัด: {provid}, อำเภอ: {amphurid}, เลขโฉนด: {parcelno})\n\n"
+            f"🔍 ข้อมูลทางเทคนิค (สำหรับตรวจสอบ):\n{error_msg}\n\n"
             f"หากต้องการค้นหาใหม่ ให้พิมพ์ 'เมนู'"
         )
     
