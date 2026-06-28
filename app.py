@@ -1,12 +1,19 @@
 import os
 import re
 import base64
-import requests
 import urllib3
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
+
+# เพิ่มการเรียกใช้ requests และ cloudscraper
+import requests
+try:
+    import cloudscraper
+    HAS_CLOUDSCRAPER = True
+except ImportError:
+    HAS_CLOUDSCRAPER = False
 
 # ปิดแจ้งเตือนเรื่อง SSL Certificate ของเว็บรัฐ
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -46,17 +53,13 @@ def fetch_parcel_data(provid, amphurid, parcelno):
         "parcelno": parcelno
     }
     
-    # ใช้ Session เพื่อเก็บ Cookie จำลองการเข้าเว็บจริงๆ แบบต่อเนื่อง
-    session = requests.Session()
-    
-    # Header ชุดใหญ่เพื่อหลอก Firewall
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://landsmaps.dol.go.th/",
         "Origin": "https://landsmaps.dol.go.th",
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7",
-        "X-Requested-With": "XMLHttpRequest", # บ่งบอกว่าเป็น AJAX Request สำคัญมาก
+        "X-Requested-With": "XMLHttpRequest", 
         "Connection": "keep-alive",
         "Sec-Fetch-Dest": "empty",
         "Sec-Fetch-Mode": "cors",
@@ -64,20 +67,32 @@ def fetch_parcel_data(provid, amphurid, parcelno):
     }
     
     try:
-        # 1. แกล้งเข้าไปที่หน้าแรกของเว็บก่อน 1 ครั้ง เพื่อให้ได้ Session/Cookie จาก Firewall
-        session.get("https://landsmaps.dol.go.th/", headers={"User-Agent": headers["User-Agent"]}, timeout=10, verify=False)
-        
-        # 2. ยิง API ขอดึงข้อมูล โดยพก Cookie และ Header ชุดใหญ่ไปด้วย
-        response = session.get(api_url, params=payload, headers=headers, timeout=15, verify=False)
+        if HAS_CLOUDSCRAPER:
+            # ใช้ cloudscraper เพื่อทะลวง Firewall (Anti-Bot)
+            scraper = cloudscraper.create_scraper(
+                browser={
+                    'browser': 'chrome',
+                    'platform': 'windows',
+                    'mobile': False
+                }
+            )
+            response = scraper.get(api_url, params=payload, headers=headers, timeout=15, verify=False)
+        else:
+            # กรณีที่ยังไม่ได้ติดตั้ง cloudscraper (เพื่อไม่ให้โปรแกรมแครช)
+            session = requests.Session()
+            session.get("https://landsmaps.dol.go.th/", headers={"User-Agent": headers["User-Agent"]}, timeout=10, verify=False)
+            response = session.get(api_url, params=payload, headers=headers, timeout=15, verify=False)
         
         if response.status_code == 200:
             try:
                 return response.json(), None
             except ValueError:
-                # กรณีที่ระบบไม่ได้ตอบกลับเป็น JSON (อาจจะติดหน้า Firewall)
                 return None, f"ระบบไม่ได้คืนค่าเป็น JSON (อาจติด Firewall):\n{response.text[:150]}..."
         else:
-            return None, f"HTTP Error {response.status_code}:\n{response.text[:150]}..."
+            error_hint = ""
+            if not HAS_CLOUDSCRAPER:
+                error_hint = "\n\n💡 คำแนะนำ: คุณยังไม่ได้เพิ่ม 'cloudscraper' ลงในไฟล์ requirements.txt บอทจึงทะลวง Firewall ไม่ได้ครับ"
+            return None, f"HTTP Error {response.status_code}:\n{response.text[:150]}...{error_hint}"
             
     except requests.exceptions.Timeout:
         return None, "Connection Timeout: เซิร์ฟเวอร์กรมที่ดินตอบสนองช้าเกินไป"
