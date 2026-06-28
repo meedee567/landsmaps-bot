@@ -22,8 +22,10 @@ user_states = {}
 # 1. ตั้งค่า LINE API Keys (เอามาจาก LINE Developers Console)
 # ==========================================
 # ในการใช้งานจริง แนะนำให้ตั้งเป็น Environment Variables แทนการใส่ค่าตรงๆ ในโค้ด
-LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('W02MmWStdnN0adL6Gg3d0XQ2Pn2Sen1FgUhEchrgJEiOY1MWmbCs/zXo2U5CgzEM8SJXujGe/iR8g2GZWAUIUrfOj2i1nalcOzFSWhIFoStH2Y7pI0msGP1r/4RKi00rhYdJxrq45/Pv6XH9FH9PaAdB04t89/1O/w1cDnyilFU=')
-LINE_CHANNEL_SECRET = os.environ.get('f73369e3afd0c6ddd500c10046812868')
+#LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('W02MmWStdnN0adL6Gg3d0XQ2Pn2Sen1FgUhEchrgJEiOY1MWmbCs/zXo2U5CgzEM8SJXujGe/iR8g2GZWAUIUrfOj2i1nalcOzFSWhIFoStH2Y7pI0msGP1r/4RKi00rhYdJxrq45/Pv6XH9FH9PaAdB04t89/1O/w1cDnyilFU=')
+#LINE_CHANNEL_SECRET = os.environ.get('f73369e3afd0c6ddd500c10046812868')
+LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN', 'ใส่_CHANNEL_ACCESS_TOKEN_ของคุณที่นี่')
+LINE_CHANNEL_SECRET = os.environ.get('LINE_CHANNEL_SECRET', 'ใส่_CHANNEL_SECRET_ของคุณที่นี่')
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
