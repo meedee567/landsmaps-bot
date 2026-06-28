@@ -85,14 +85,19 @@ def fetch_parcel_data(provid, amphurid, parcelno):
                 browser={
                     'browser': 'chrome',
                     'platform': 'windows',
-                    'mobile': False
+                    'desktop': True
                 }
             )
             # ใช้งาน Adapter ตัวใหม่เพื่อไม่ให้ติด Error CERT_NONE
             scraper.mount('https://', UnverifiedContextAdapter())
+            
+            # สำคัญ: ต้องแกล้งเข้าหน้าแรก 1 ครั้งเพื่อให้ได้ Cookie (บัตรผ่าน Firewall)
+            scraper.get("https://landsmaps.dol.go.th/", headers=headers, timeout=15)
+            
+            # ยิง API เพื่อขอข้อมูล
             response = scraper.get(api_url, params=payload, headers=headers, timeout=15)
         else:
-            # กรณีที่ยังไม่ได้ติดตั้ง cloudscraper (เพื่อไม่ให้โปรแกรมแครช)
+            # กรณีที่ยังไม่ได้ติดตั้ง cloudscraper
             session = requests.Session()
             session.mount('https://', UnverifiedContextAdapter())
             session.get("https://landsmaps.dol.go.th/", headers={"User-Agent": headers["User-Agent"]}, timeout=10)
@@ -103,6 +108,15 @@ def fetch_parcel_data(provid, amphurid, parcelno):
                 return response.json(), None
             except ValueError:
                 return None, f"ระบบไม่ได้คืนค่าเป็น JSON (อาจติด Firewall):\n{response.text[:150]}..."
+        elif response.status_code == 403:
+            # ดักจับ Error 403 เพื่อแจ้งเตือนเรื่อง IP Block
+            error_hint = (
+                f"HTTP Error 403 (Forbidden):\n"
+                f"เซิร์ฟเวอร์กรมที่ดินบล็อกการเชื่อมต่อ สาเหตุที่เป็นไปได้มากที่สุดคือ:\n"
+                f"🚨 IP ของ Server (Render.com) อยู่ต่างประเทศ เว็บของรัฐจึงบล็อกอัตโนมัติ (Geo-blocking)\n"
+                f"ทางแก้: อาจต้องนำโค้ดไปรันบน Server หรือ Hosting ที่ตั้งอยู่ในประเทศไทยครับ"
+            )
+            return None, error_hint
         else:
             error_hint = ""
             if not HAS_CLOUDSCRAPER:
