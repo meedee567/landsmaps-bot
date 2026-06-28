@@ -134,11 +134,44 @@ def reply_api_data(reply_token, provid, amphurid, parcelno):
     parcel_data = fetch_parcel_data(provid, amphurid, parcelno)
     
     if parcel_data:
+        # ป้องกันกรณีที่ API อาจคืนค่ากลับมาเป็น List 
+        data = parcel_data[0] if isinstance(parcel_data, list) and len(parcel_data) > 0 else parcel_data
+        
+        # สร้างลิงก์ LandsMaps ด้วยการเข้ารหัส Base64 ของ provid,amphurid,parcelno
+        token_string = f"{provid},{amphurid},{parcelno}"
+        token_base64 = base64.b64encode(token_string.encode('utf-8')).decode('utf-8')
+        landsmaps_url = f"https://landsmaps.dol.go.th?qrcodeToken={token_base64}"
+        
+        # ดึงค่าต่างๆ ออกมาจาก JSON (ปรับปรุงชื่อฟิลด์ให้ตรงตามที่ LandsMaps มักจะใช้)
+        rawang = data.get('rawang', '-') 
+        tambon = data.get('tambonName', '-') 
+        amphur = data.get('amphurName', '-')
+        province = data.get('provinceName', '-')
+        rai = data.get('rai', '0')
+        ngan = data.get('ngan', '0')
+        wa = data.get('wa', '0')
+        price = data.get('price', '-') 
+        
+        # พิกัดแปลง
+        lat = data.get('lat', '') 
+        lon = data.get('lon', '')
+        
+        if lat and lon:
+            google_maps_url = f"https://www.google.com/maps?q={lat},{lon}"
+            location_display = f"{lat},{lon}\n({google_maps_url})"
+        else:
+            location_display = "-"
+            
         reply_text = (
             f"✅ ดึงข้อมูลสำเร็จ\n\n"
-            f"📍 จังหวัด: {provid}\n"
-            f"📍 อำเภอ: {amphurid}\n"
-            f"📄 เลขโฉนด: {parcelno}\n"
+            f"ลิ้งแปลงที่ดิน :\n{landsmaps_url}\n\n"
+            f"ระวาง : {rawang}\n"
+            f"ตำบล : {tambon}\n"
+            f"อำเภอ : {amphur}\n"
+            f"จังหวัด : {province}\n"
+            f"เนื้อที่ : {rai} ไร่ {ngan} งาน {wa} ตารางวา\n"
+            f"ราคาประเมินที่ดิน : {price} บาท/ตร.วา\n"
+            f"ค่าพิกัดแปลง : {location_display}\n"
             f"----------------------\n"
             f"หากต้องการค้นหาที่อื่นต่อ ให้พิมพ์ 'เมนู'"
         )
