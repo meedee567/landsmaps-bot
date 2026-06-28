@@ -46,17 +46,29 @@ def fetch_parcel_data(provid, amphurid, parcelno):
         "parcelno": parcelno
     }
     
+    # ใช้ Session เพื่อเก็บ Cookie จำลองการเข้าเว็บจริงๆ แบบต่อเนื่อง
+    session = requests.Session()
+    
+    # Header ชุดใหญ่เพื่อหลอก Firewall
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://landsmaps.dol.go.th/",
+        "Origin": "https://landsmaps.dol.go.th",
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Connection": "keep-alive"
+        "X-Requested-With": "XMLHttpRequest", # บ่งบอกว่าเป็น AJAX Request สำคัญมาก
+        "Connection": "keep-alive",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin"
     }
     
     try:
-        # เพิ่ม verify=False เพื่อข้ามการเช็ค SSL ที่มักจะมีปัญหากับเว็บหน่วยงาน
-        response = requests.get(api_url, params=payload, headers=headers, timeout=15, verify=False)
+        # 1. แกล้งเข้าไปที่หน้าแรกของเว็บก่อน 1 ครั้ง เพื่อให้ได้ Session/Cookie จาก Firewall
+        session.get("https://landsmaps.dol.go.th/", headers={"User-Agent": headers["User-Agent"]}, timeout=10, verify=False)
+        
+        # 2. ยิง API ขอดึงข้อมูล โดยพก Cookie และ Header ชุดใหญ่ไปด้วย
+        response = session.get(api_url, params=payload, headers=headers, timeout=15, verify=False)
         
         if response.status_code == 200:
             try:
